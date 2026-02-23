@@ -26,7 +26,7 @@ class TransportState {
 	constructor(
 		private readonly encKey: Uint8Array,
 		private readonly decKey: Uint8Array
-	) {}
+	) { }
 
 	encrypt(plaintext: Uint8Array): Uint8Array {
 		const c = this.writeCounter++
@@ -58,7 +58,7 @@ export const makeNoiseHandler = ({
 	keyPair: KeyPair
 	NOISE_HEADER: Uint8Array
 	logger: ILogger
-	routingInfo?: Buffer | undefined
+	routingInfo?: Uint8Array | undefined
 }) => {
 	logger = logger.child({ class: 'ns' })
 
@@ -117,7 +117,7 @@ export const makeNoiseHandler = ({
 	}
 
 	const localHKDF = (data: Uint8Array): [Uint8Array, Uint8Array] => {
-		const key = hkdf(Buffer.from(data), 64, { salt, info: '' })
+		const key = hkdf(data, 64, { salt, info: '' })
 		return [key.subarray(0, 32), key.subarray(32)]
 	}
 

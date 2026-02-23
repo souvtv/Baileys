@@ -1,10 +1,13 @@
-import { promisify } from 'util'
-import { inflate } from 'zlib'
+import { inflate, type InputType } from 'zlib'
 import * as constants from './constants'
 import { jidEncode, type JidServer, WAJIDDomains } from './jid-utils'
 import type { BinaryNode, BinaryNodeCodingOptions } from './types'
 
-const inflatePromise = promisify(inflate)
+const inflatePromise = (buf: InputType) => new Promise<Buffer<ArrayBufferLike>>((resolve, reject) => {
+	inflate(buf, (err, result) => {
+		err ? reject(err) : resolve(result)
+	})
+})
 
 export const decompressingIfRequired = async (buffer: Buffer) => {
 	if (2 & buffer.readUInt8()) {

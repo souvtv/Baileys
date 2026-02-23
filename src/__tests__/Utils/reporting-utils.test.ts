@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { randomBytes } from '@noble/ciphers/utils.js'
 import { proto } from '../../../WAProto'
 import type { WAMessageKey } from '../../Types'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../../Utils/reporting-utils'

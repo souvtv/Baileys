@@ -1,6 +1,4 @@
-import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
-import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
 import {
@@ -46,6 +44,7 @@ import {
 	NO_MESSAGE_FOUND_ERROR_TEXT,
 	toNumber,
 	unixTimestampSeconds,
+	CacheStore,
 	xmppPreKey,
 	xmppSignedPreKey
 } from '../Utils'
@@ -70,6 +69,7 @@ import {
 } from '../WABinary'
 import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
+import { randomBytes } from '@noble/ciphers/utils.js'
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, enableAutoSessionRecreation } =
@@ -101,26 +101,23 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
-		new NodeCache<number>({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+		new CacheStore<number>({
+			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
 		})
 	const callOfferCache =
 		config.callOfferCache ||
-		new NodeCache<WACallEvent>({
-			stdTTL: DEFAULT_CACHE_TTLS.CALL_OFFER, // 5 mins
-			useClones: false
+		new CacheStore<WACallEvent>({
+			ttl: DEFAULT_CACHE_TTLS.CALL_OFFER, // 5 mins
 		})
 
 	const placeholderResendCache =
 		config.placeholderResendCache ||
-		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+		new CacheStore({
+			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
 		})
 
 	// Debounce identity-change session refreshes per JID to avoid bursts
-	const identityAssertDebounce = new NodeCache<boolean>({ stdTTL: 5, useClones: false })
+	const identityAssertDebounce = new CacheStore<boolean>({ ttl: 5 })
 
 	let sendActiveReceipts = false
 
@@ -1606,7 +1603,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		await processNode('call', node, 'handling call', handleCall)
 	})
 
-	ws.on('CB:receipt', async node => {
+	ws.on('CB:receipt', async (node: BinaryNode) => {
 		await processNode('receipt', node, 'handling receipt', handleReceipt)
 	})
 

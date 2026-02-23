@@ -37,75 +37,77 @@ export const getUrlInfo = async (
 		fetchOpts: { timeout: 3000 }
 	}
 ): Promise<WAUrlInfo | undefined> => {
-	try {
-		// retries
-		const retries = 0
-		const maxRetry = 5
+	opts.logger?.warn("Not supporting link preview generation!")
+	return undefined
+	// try {
+	// 	// retries
+	// 	const retries = 0
+	// 	const maxRetry = 5
 
-		const { getLinkPreview } = await import('link-preview-js')
-		let previewLink = text
-		if (!text.startsWith('https://') && !text.startsWith('http://')) {
-			previewLink = 'https://' + previewLink
-		}
+	// 	const { getLinkPreview } = await import('link-preview-js')
+	// 	let previewLink = text
+	// 	if (!text.startsWith('https://') && !text.startsWith('http://')) {
+	// 		previewLink = 'https://' + previewLink
+	// 	}
 
-		const info = await getLinkPreview(previewLink, {
-			...opts.fetchOpts,
-			followRedirects: 'follow',
-			handleRedirects: (baseURL: string, forwardedURL: string) => {
-				const urlObj = new URL(baseURL)
-				const forwardedURLObj = new URL(forwardedURL)
-				if (retries >= maxRetry) {
-					return false
-				}
+	// 	const info = await getLinkPreview(previewLink, {
+	// 		...opts.fetchOpts,
+	// 		followRedirects: 'follow',
+	// 		handleRedirects: (baseURL: string, forwardedURL: string) => {
+	// 			const urlObj = new URL(baseURL)
+	// 			const forwardedURLObj = new URL(forwardedURL)
+	// 			if (retries >= maxRetry) {
+	// 				return false
+	// 			}
 
-				if (
-					forwardedURLObj.hostname === urlObj.hostname ||
-					forwardedURLObj.hostname === 'www.' + urlObj.hostname ||
-					'www.' + forwardedURLObj.hostname === urlObj.hostname
-				) {
-					retries + 1
-					return true
-				} else {
-					return false
-				}
-			},
-			headers: opts.fetchOpts?.headers as {}
-		})
-		if (info && 'title' in info && info.title) {
-			const [image] = info.images
+	// 			if (
+	// 				forwardedURLObj.hostname === urlObj.hostname ||
+	// 				forwardedURLObj.hostname === 'www.' + urlObj.hostname ||
+	// 				'www.' + forwardedURLObj.hostname === urlObj.hostname
+	// 			) {
+	// 				retries + 1
+	// 				return true
+	// 			} else {
+	// 				return false
+	// 			}
+	// 		},
+	// 		headers: opts.fetchOpts?.headers as {}
+	// 	})
+	// 	if (info && 'title' in info && info.title) {
+	// 		const [image] = info.images
 
-			const urlInfo: WAUrlInfo = {
-				'canonical-url': info.url,
-				'matched-text': text,
-				title: info.title,
-				description: info.description,
-				originalThumbnailUrl: image
-			}
+	// 		const urlInfo: WAUrlInfo = {
+	// 			'canonical-url': info.url,
+	// 			'matched-text': text,
+	// 			title: info.title,
+	// 			description: info.description,
+	// 			originalThumbnailUrl: image
+	// 		}
 
-			if (opts.uploadImage) {
-				const { imageMessage } = await prepareWAMessageMedia(
-					{ image: { url: image! } },
-					{
-						upload: opts.uploadImage,
-						mediaTypeOverride: 'thumbnail-link',
-						options: opts.fetchOpts
-					}
-				)
-				urlInfo.jpegThumbnail = imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined
-				urlInfo.highQualityThumbnail = imageMessage || undefined
-			} else {
-				try {
-					urlInfo.jpegThumbnail = image ? (await getCompressedJpegThumbnail(image, opts)).buffer : undefined
-				} catch (error: any) {
-					opts.logger?.debug({ err: error.stack, url: previewLink }, 'error in generating thumbnail')
-				}
-			}
+	// 		if (opts.uploadImage) {
+	// 			const { imageMessage } = await prepareWAMessageMedia(
+	// 				{ image: { url: image! } },
+	// 				{
+	// 					upload: opts.uploadImage,
+	// 					mediaTypeOverride: 'thumbnail-link',
+	// 					options: opts.fetchOpts
+	// 				}
+	// 			)
+	// 			urlInfo.jpegThumbnail = imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined
+	// 			urlInfo.highQualityThumbnail = imageMessage || undefined
+	// 		} else {
+	// 			try {
+	// 				urlInfo.jpegThumbnail = image ? (await getCompressedJpegThumbnail(image, opts))?.buffer : undefined
+	// 			} catch (error: any) {
+	// 				opts.logger?.debug({ err: error.stack, url: previewLink }, 'error in generating thumbnail')
+	// 			}
+	// 		}
 
-			return urlInfo
-		}
-	} catch (error: any) {
-		if (!error.message.includes('receive a valid')) {
-			throw error
-		}
-	}
+	// 		return urlInfo
+	// 	}
+	// } catch (error: any) {
+	// 	if (!error.message.includes('receive a valid')) {
+	// 		throw error
+	// 	}
+	// }
 }

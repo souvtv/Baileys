@@ -1,4 +1,4 @@
-import P from 'pino'
+
 
 export interface ILogger {
 	level: string
@@ -10,4 +10,14 @@ export interface ILogger {
 	error(obj: unknown, msg?: string): void
 }
 
-export default P({ timestamp: () => `,"time":"${new Date().toJSON()}"` })
+const P = <ILogger>{
+	level: 'trace',
+	child: () => P,
+	trace: console.debug,
+	debug: console.debug,
+	info: console.info,
+	warn: console.warn,
+	error: console.error
+}
+
+export default P

@@ -1,31 +1,14 @@
-import type { Agent } from 'https'
-import type { URL } from 'url'
 import { proto } from '../../WAProto/index.js'
 import type { ILogger } from '../Utils/logger'
 import type { AuthenticationState, LIDMapping, SignalAuthState, TransactionCapabilityOptions } from './Auth'
 import type { GroupMetadata } from './GroupMetadata'
-import { type MediaConnInfo, type WAMessageKey } from './Message'
+import type { MediaConnInfo, WAMessageKey } from './Message'
 import type { SignalRepositoryWithLIDStore } from './Signal'
+import type { CacheStore } from '../Utils/cache'
 
 export type WAVersion = [number, number, number]
 export type WABrowserDescription = [string, string, string]
-
-export type CacheStore = {
-	/** get a cached key and change the stats */
-	get<T>(key: string): Promise<T> | T | undefined
-	/** set a key in the cache */
-	set<T>(key: string, value: T): Promise<void> | void | number | boolean
-	/** delete a key from the cache */
-	del(key: string): void | Promise<void> | number | boolean
-	/** flush all data */
-	flushAll(): void | Promise<void>
-}
-
-export type PossiblyExtendedCacheStore = CacheStore & {
-	mget?: <T>(keys: string[]) => Promise<Record<string, T | undefined>>
-	mset?: <T>(entries: { key: string; value: T }[]) => Promise<void> | void | number | boolean
-	mdel?: (keys: string[]) => void | Promise<void> | number | boolean
-}
+export type { CacheStore }
 
 export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: string }
 
@@ -43,7 +26,7 @@ export type SocketConfig = {
 	 */
 	mobile?: boolean
 	/** proxy agent */
-	agent?: Agent
+	agent?: any
 	/** logger */
 	logger: ILogger
 	/** version to connect with */
@@ -51,7 +34,7 @@ export type SocketConfig = {
 	/** override browser config */
 	browser: WABrowserDescription
 	/** agent used for fetch requests -- uploading/downloading media */
-	fetchAgent?: Agent
+	fetchAgent?: any
 	/** should the QR be printed in the terminal
 	 * @deprecated This feature has been removed
 	 */
@@ -83,7 +66,7 @@ export type SocketConfig = {
 	 * used to determine whether to retry a message or not */
 	msgRetryCounterCache?: CacheStore
 	/** provide a cache to store a user's device list */
-	userDevicesCache?: PossiblyExtendedCacheStore
+	userDevicesCache?: CacheStore
 	/** cache to store call offers */
 	callOfferCache?: CacheStore
 	/** cache to track placeholder resends */

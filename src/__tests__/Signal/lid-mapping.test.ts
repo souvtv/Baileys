@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals'
-import P from 'pino'
+
 import { LIDMappingStore } from '../../Signal/lid-mapping'
 import type { LIDMapping, SignalDataTypeMap, SignalKeyStoreWithTransaction } from '../../Types'
 

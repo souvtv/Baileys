@@ -1,7 +1,6 @@
 import { Boom } from '@hapi/boom'
 import { jest } from '@jest/globals'
 import { readFileSync } from 'node:fs'
-import P from 'pino'
 import makeWASocket, {
 	DisconnectReason,
 	downloadContentFromMessage,

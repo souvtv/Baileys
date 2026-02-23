@@ -67,7 +67,7 @@ export type AuthenticationCreds = SignalCreds & {
 	registered: boolean
 	pairingCode: string | undefined
 	lastPropHash: string | undefined
-	routingInfo: Buffer | undefined
+	routingInfo: Uint8Array | undefined
 	additionalData?: any | undefined
 }
 

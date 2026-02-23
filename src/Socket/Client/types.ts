@@ -1,6 +1,6 @@
-import { EventEmitter } from 'events'
-import { URL } from 'url'
+import EventEmitter from '../../Utils/event-emitter'
 import type { SocketConfig } from '../../Types'
+import type { Buffer } from 'buffer'
 
 export abstract class AbstractSocketClient extends EventEmitter {
 	abstract get isOpen(): boolean
@@ -13,10 +13,9 @@ export abstract class AbstractSocketClient extends EventEmitter {
 		public config: SocketConfig
 	) {
 		super()
-		this.setMaxListeners(0)
 	}
 
 	abstract connect(): void
 	abstract close(): void
-	abstract send(str: Uint8Array | string, cb?: (err?: Error) => void): boolean
+	abstract send(str: string | BufferSource, cb?: (err?: Error) => void): boolean
 }

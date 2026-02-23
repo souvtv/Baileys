@@ -1,4 +1,3 @@
-import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
@@ -31,9 +30,10 @@ import {
 	MessageRetryManager,
 	normalizeMessageContent,
 	parseAndInjectE2ESessions,
-	unixTimestampSeconds
+	scheduleMicrotask,
+	unixTimestampSeconds,
+	getUrlInfo
 } from '../Utils'
-import { getUrlInfo } from '../Utils/link-preview'
 import { makeKeyedMutex } from '../Utils/make-mutex'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
@@ -56,6 +56,7 @@ import {
 } from '../WABinary'
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeNewsletterSocket } from './newsletter'
+import { CacheStore } from '../Utils/cache.js'
 
 export const makeMessagesSocket = (config: SocketConfig) => {
 	const {
@@ -84,14 +85,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const userDevicesCache =
 		config.userDevicesCache ||
-		new NodeCache<JidWithDevice[]>({
-			stdTTL: DEFAULT_CACHE_TTLS.USER_DEVICES, // 5 minutes
-			useClones: false
+		new CacheStore<JidWithDevice[]>({
+			ttl: DEFAULT_CACHE_TTLS.USER_DEVICES, // 5 minutes
+
 		})
 
-	const peerSessionsCache = new NodeCache<boolean>({
-		stdTTL: DEFAULT_CACHE_TTLS.USER_DEVICES,
-		useClones: false
+	const peerSessionsCache = new CacheStore<boolean>({
+		ttl: DEFAULT_CACHE_TTLS.USER_DEVICES,
 	})
 
 	// Initialize message retry manager if enabled
@@ -257,7 +257,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (useCache) {
 				const devices =
 					mgetDevices?.[user!] ||
-					(userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user!)) as FullJid[]))
+					(!!userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user!)) as FullJid[]))
 				if (devices) {
 					const devicesWithJid = devices.map(d => ({
 						...d,
@@ -424,7 +424,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// Check peerSessionsCache and validate sessions using libsignal loadSession
 		for (const jid of uniqueJids) {
 			const signalId = signalRepository.jidToSignalProtocolAddress(jid)
-			const cachedSession = peerSessionsCache.get(signalId)
+			const cachedSession = await peerSessionsCache.get(signalId)
 			if (cachedSession !== undefined) {
 				if (cachedSession && !force) {
 					continue // Session exists in cache
@@ -539,48 +539,48 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const meLid = authState.creds.me?.lid
 		const meLidUser = meLid ? jidDecode(meLid)?.user : null
 
-		const encryptionPromises = (patchedMessages as any).map(
+		const encryptionPromises = patchedMessages.map(
 			async ({ recipientJid: jid, message: patchedMessage }: any) => {
 				try {
 					if (!jid) return null
 
 					let msgToEncrypt = patchedMessage
 
-					if (dsmMessage) {
-						const { user: targetUser } = jidDecode(jid)!
-						const { user: ownPnUser } = jidDecode(meId)!
-						const ownLidUser = meLidUser
+				if (dsmMessage) {
+					const { user: targetUser } = jidDecode(jid)!
+					const { user: ownPnUser } = jidDecode(meId)!
+					const ownLidUser = meLidUser
 
-						const isOwnUser = targetUser === ownPnUser || (ownLidUser && targetUser === ownLidUser)
-						const isExactSenderDevice = jid === meId || (meLid && jid === meLid)
+					const isOwnUser = targetUser === ownPnUser || (ownLidUser && targetUser === ownLidUser)
+					const isExactSenderDevice = jid === meId || (meLid && jid === meLid)
 
-						if (isOwnUser && !isExactSenderDevice) {
-							msgToEncrypt = dsmMessage
-							logger.debug({ jid, targetUser }, 'Using DSM for own device')
-						}
+					if (isOwnUser && !isExactSenderDevice) {
+						msgToEncrypt = dsmMessage
+						logger.debug({ jid, targetUser }, 'Using DSM for own device')
+					}
+				}
+
+				const bytes = encodeWAMessage(msgToEncrypt)
+				const mutexKey = jid
+
+				const node = await encryptionMutex.mutex(mutexKey, async () => {
+					const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
+
+					if (type === 'pkmsg') {
+						shouldIncludeDeviceIdentity = true
 					}
 
-					const bytes = encodeWAMessage(msgToEncrypt)
-					const mutexKey = jid
-
-					const node = await encryptionMutex.mutex(mutexKey, async () => {
-						const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
-
-						if (type === 'pkmsg') {
-							shouldIncludeDeviceIdentity = true
-						}
-
-						return {
-							tag: 'to',
-							attrs: { jid },
-							content: [
-								{
-									tag: 'enc',
-									attrs: { v: '2', type, ...(extraAttrs || {}) },
-									content: ciphertext
-								}
-							]
-						}
+					return {
+						tag: 'to',
+						attrs: { jid },
+						content: [
+							{
+								tag: 'enc',
+								attrs: { v: '2', type, ...(extraAttrs || {}) },
+								content: ciphertext
+							}
+						]
+					}
 					})
 
 					return node
@@ -912,11 +912,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const encodedMessageToSend = isMe
 					? encodeWAMessage({
-							deviceSentMessage: {
-								destinationJid,
-								message
-							}
-						})
+						deviceSentMessage: {
+							destinationJid,
+							message
+						}
+					})
 					: encodeWAMessage(message)
 
 				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
@@ -980,7 +980,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (shouldIncludeDeviceIdentity) {
-				;(stanza.content as BinaryNode[]).push({
+				; (stanza.content as BinaryNode[]).push({
 					tag: 'device-identity',
 					attrs: {},
 					content: encodeSignedDeviceIdentity(authState.creds.account!, true)
@@ -1005,7 +1005,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 					const reportingNode = await getMessageReportingToken(encoded, reportingMessage, reportingKey)
 					if (reportingNode) {
-						;(stanza.content as BinaryNode[]).push(reportingNode)
+						; (stanza.content as BinaryNode[]).push(reportingNode)
 						logger.trace({ jid }, 'added reporting token to message')
 					}
 				} catch (error: any) {
@@ -1019,7 +1019,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
 			if (tcTokenBuffer) {
-				;(stanza.content as BinaryNode[]).push({
+				; (stanza.content as BinaryNode[]).push({
 					tag: 'tctoken',
 					attrs: {},
 					content: tcTokenBuffer
@@ -1027,7 +1027,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (additionalNodes && additionalNodes.length > 0) {
-				;(stanza.content as BinaryNode[]).push(...additionalNodes)
+				; (stanza.content as BinaryNode[]).push(...additionalNodes)
 			}
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
@@ -1284,7 +1284,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					additionalNodes
 				})
 				if (config.emitOwnEvents) {
-					process.nextTick(async () => {
+					scheduleMicrotask(async () => {
 						await messageMutex.mutex(() => upsertMessage(fullMsg, 'append'))
 					})
 				}

@@ -1,5 +1,4 @@
 import type { Readable } from 'stream'
-import type { URL } from 'url'
 import { proto } from '../../WAProto/index.js'
 import type { MediaType } from '../Defaults'
 import type { BinaryNode } from '../WABinary'

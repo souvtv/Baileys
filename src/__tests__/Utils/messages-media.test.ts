@@ -3,7 +3,7 @@ import * as http from 'http'
 import * as os from 'os'
 import * as path from 'path'
 import { Readable } from 'stream'
-import { encryptedStream, type UploadParams, uploadWithNodeHttp } from '../../Utils/messages-media'
+import { encryptedStream, type UploadParams, uploadWithFetch } from '../../Utils/messages-media'
 
 const createTempFile = async (content: string): Promise<string> => {
 	const filePath = path.join(os.tmpdir(), `test-upload-${Date.now()}.txt`)
@@ -17,7 +17,7 @@ const cleanupTempFile = async (filePath: string): Promise<void> => {
 	} catch {}
 }
 
-describe('uploadWithNodeHttp', () => {
+describe('uploadWithFetch', () => {
 	let server: http.Server
 	let serverPort: number
 	let tempFilePath: string
@@ -70,7 +70,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(receivedBody).toBe(testFileContent)
@@ -101,7 +101,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(requestCount).toBe(2)
@@ -138,7 +138,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(requestCount).toBe(4)
@@ -157,7 +157,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		await expect(uploadWithNodeHttp(params)).rejects.toThrow('Too many redirects')
+		await expect(uploadWithFetch(params)).rejects.toThrow('Too many redirects')
 	})
 
 	it('should return undefined for non-JSON response', async () => {
@@ -176,7 +176,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toBeUndefined()
 	})
@@ -206,7 +206,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(requestCount).toBe(2)
@@ -243,7 +243,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: customHeaders
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(capturedHeaders?.['x-custom-header']).toBe('test-value')
@@ -278,7 +278,7 @@ describe('uploadWithNodeHttp', () => {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		}
 
-		const result = await uploadWithNodeHttp(params)
+		const result = await uploadWithFetch(params)
 
 		expect(result).toEqual(expectedResponse)
 		expect(finalReceivedBody).toBe(testFileContent)

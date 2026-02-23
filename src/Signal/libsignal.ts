@@ -1,12 +1,12 @@
-// @ts-ignore
-import * as libsignal from 'libsignal'
+import { ProtocolAddress, SessionBuilder, SessionCipher, SessionRecord, type SignalStorage } from 'libsignal'
 // @ts-ignore
 import { PreKeyWhisperMessage } from 'libsignal/src/protobufs'
 import { LRUCache } from 'lru-cache'
 import type { LIDMapping, SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import type { SignalRepositoryWithLIDStore } from '../Types/Signal'
-import { generateSignalPubKey } from '../Utils'
+import { generateSignalPubKey } from '../Utils/crypto'
 import type { ILogger } from '../Utils/logger'
+import { Buffer } from 'buffer'
 import {
 	isHostedLidUser,
 	isHostedPnUser,
@@ -104,7 +104,7 @@ export function makeLibSignalRepository(
 		},
 		async decryptMessage({ jid, type, ciphertext }) {
 			const addr = jidToSignalProtocolAddress(jid)
-			const session = new libsignal.SessionCipher(storage, addr)
+			const session = new SessionCipher(storage, addr)
 
 			// Extract and save sender's identity key before decryption for identity change detection
 			if (type === 'pkmsg') {
@@ -141,7 +141,7 @@ export function makeLibSignalRepository(
 
 		async encryptMessage({ jid, data }) {
 			const addr = jidToSignalProtocolAddress(jid)
-			const cipher = new libsignal.SessionCipher(storage, addr)
+			const cipher = new SessionCipher(storage, addr)
 
 			// Use transaction to ensure atomicity
 			return parsedKeys.transaction(async () => {
@@ -176,7 +176,7 @@ export function makeLibSignalRepository(
 
 		async injectE2ESession({ jid, session }) {
 			logger.trace({ jid }, 'injecting E2EE session')
-			const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid))
+			const cipher = new SessionBuilder(storage, jidToSignalProtocolAddress(jid))
 			return parsedKeys.transaction(async () => {
 				await cipher.initOutgoing(session)
 			}, jid)
@@ -298,8 +298,8 @@ export function makeLibSignalRepository(
 						pnUser: string
 						lidUser: string
 						deviceId: number
-						fromAddr: libsignal.ProtocolAddress
-						toAddr: libsignal.ProtocolAddress
+						fromAddr: ProtocolAddress
+						toAddr: ProtocolAddress
 					}
 
 					const migrationOps: MigrationOp[] = deviceJids.map(jid => {
@@ -335,7 +335,7 @@ export function makeLibSignalRepository(
 						const pnSession = pnSessions[pnAddrStr]
 						if (pnSession) {
 							// Session exists (guaranteed from device discovery)
-							const fromSession = libsignal.SessionRecord.deserialize(pnSession)
+							const fromSession = SessionRecord.deserialize(pnSession)
 							if (fromSession.haveOpenSession()) {
 								// Queue for bulk update: copy to LID, delete from PN
 								sessionUpdates[lidAddrStr] = fromSession.serialize()
@@ -371,7 +371,7 @@ export function makeLibSignalRepository(
 	return repository
 }
 
-const jidToSignalProtocolAddress = (jid: string): libsignal.ProtocolAddress => {
+const jidToSignalProtocolAddress = (jid: string): ProtocolAddress => {
 	const decoded = jidDecode(jid)!
 	const { user, device, server, domainType } = decoded
 
@@ -388,7 +388,7 @@ const jidToSignalProtocolAddress = (jid: string): libsignal.ProtocolAddress => {
 		throw new Error('Unexpected non-hosted device JID with device 99. This ID seems invalid. ID:' + jid)
 	}
 
-	return new libsignal.ProtocolAddress(signalUser, finalDevice)
+	return new ProtocolAddress(signalUser, finalDevice)
 }
 
 const jidToSignalSenderKeyName = (group: string, user: string): SenderKeyName => {
@@ -399,7 +399,7 @@ function signalStorage(
 	{ creds, keys }: SignalAuthState,
 	lidMapping: LIDMappingStore
 ): SenderKeyStore &
-	libsignal.SignalStorage & {
+	SignalStorage & {
 		loadIdentityKey(id: string): Promise<Uint8Array | undefined>
 		saveIdentity(id: string, identityKey: Uint8Array): Promise<boolean>
 	} {
@@ -431,7 +431,7 @@ function signalStorage(
 				const { [wireJid]: sess } = await keys.get('session', [wireJid])
 
 				if (sess) {
-					return libsignal.SessionRecord.deserialize(sess)
+					return SessionRecord.deserialize(sess)
 				}
 			} catch (e) {
 				return null
@@ -439,7 +439,7 @@ function signalStorage(
 
 			return null
 		},
-		storeSession: async (id: string, session: libsignal.SessionRecord) => {
+		storeSession: async (id: string, session: SessionRecord) => {
 			const wireJid = await resolveLIDSignalAddress(id)
 			await keys.set({ session: { [wireJid]: session.serialize() } })
 		},

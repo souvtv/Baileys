@@ -13,6 +13,7 @@ import type {
 import { DisconnectReason } from '../Types'
 import { type BinaryNode, getAllBinaryNodeChildren, jidDecode } from '../WABinary'
 import { sha256 } from './crypto'
+import { Buffer } from 'buffer'
 
 export const BufferJSON = {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,6 +124,15 @@ export const debouncedTimeout = (intervalMs = 1000, task?: () => void) => {
 }
 
 export const delay = (ms: number) => delayCancellable(ms).delay
+
+export const scheduleMicrotask = (task: () => void) => {
+	if (typeof queueMicrotask === 'function') {
+		queueMicrotask(task)
+		return
+	}
+
+	void Promise.resolve().then(task)
+}
 
 export const delayCancellable = (ms: number) => {
 	const stack = new Error().stack

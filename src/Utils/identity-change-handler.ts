@@ -1,7 +1,7 @@
-import NodeCache from '@cacheable/node-cache'
 import { areJidsSameUser, type BinaryNode, getBinaryNodeChild, jidDecode } from '../WABinary'
 import { isStringNullOrEmpty } from './generics'
 import type { ILogger } from './logger'
+import type { CacheStore } from './cache'
 
 export type IdentityChangeResult =
 	| { action: 'no_identity_node' }
@@ -19,7 +19,7 @@ export type IdentityChangeContext = {
 	meLid: string | undefined
 	validateSession: (jid: string) => Promise<{ exists: boolean; reason?: string }>
 	assertSessions: (jids: string[], force?: boolean) => Promise<boolean>
-	debounceCache: NodeCache<boolean>
+	debounceCache: CacheStore<boolean>
 	logger: ILogger
 }
 
@@ -51,7 +51,7 @@ export async function handleIdentityChange(
 		return { action: 'skipped_self_primary' }
 	}
 
-	if (ctx.debounceCache.get(from)) {
+	if (await ctx.debounceCache.get(from)) {
 		ctx.logger.debug({ jid: from }, 'skipping identity assert (debounced)')
 		return { action: 'debounced' }
 	}

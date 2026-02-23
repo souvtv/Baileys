@@ -1,7 +1,4 @@
 import { Boom } from '@hapi/boom'
-import { randomBytes } from 'crypto'
-import { promises as fs } from 'fs'
-import { type Transform } from 'stream'
 import { proto } from '../../WAProto/index.js'
 import {
 	CALL_AUDIO_PREFIX,
@@ -41,6 +38,9 @@ import {
 	type MediaDownloadOptions
 } from './messages-media'
 import { shouldIncludeReportingToken } from './reporting-utils'
+import { randomBytes } from '@noble/ciphers/utils.js'
+import { Buffer } from 'buffer'
+import { Readable } from 'stream'
 
 type ExtractByKey<T, K extends PropertyKey> = T extends Record<K, any> ? T : never
 type RequireKey<T, K extends keyof T> = T & {
@@ -189,7 +189,7 @@ export const prepareWAMessageMedia = async (
 			timeoutMs: options.mediaUploadTimeoutMs
 		})
 
-		await fs.unlink(filePath)
+		// await fs.unlink(filePath)
 
 		const obj = WAProto.Message.fromObject({
 			// todo: add more support here
@@ -285,9 +285,9 @@ export const prepareWAMessageMedia = async (
 		})()
 	]).finally(async () => {
 		try {
-			await fs.unlink(encFilePath)
+			// await fs.unlink(encFilePath)
 			if (originalFilePath) {
-				await fs.unlink(originalFilePath)
+				// await fs.unlink(originalFilePath)
 			}
 
 			logger?.debug('removed tmp files')
@@ -1014,6 +1014,34 @@ type DownloadMediaMessageContext = {
 
 const REUPLOAD_REQUIRED_STATUS = [410, 404]
 
+const parseMediaFileLength = (media: unknown) => {
+	if (!media || typeof media !== 'object' || !('fileLength' in media)) {
+		return undefined
+	}
+
+	const fileLength = (media as any).fileLength
+	if (typeof fileLength === 'number') {
+		return Number.isFinite(fileLength) ? fileLength : undefined
+	}
+
+	if (typeof fileLength === 'bigint') {
+		const converted = Number(fileLength)
+		return Number.isSafeInteger(converted) ? converted : undefined
+	}
+
+	if (typeof fileLength === 'string') {
+		const converted = Number(fileLength)
+		return Number.isFinite(converted) ? converted : undefined
+	}
+
+	if (typeof fileLength === 'object' && fileLength && typeof fileLength.toNumber === 'function') {
+		const converted = fileLength.toNumber()
+		return Number.isFinite(converted) ? converted : undefined
+	}
+
+	return undefined
+}
+
 /**
  * Downloads the given message. Throws an error if it's not a media message
  */
@@ -1039,7 +1067,7 @@ export const downloadMediaMessage = async <Type extends 'buffer' | 'stream'>(
 		throw error
 	})
 
-	return result as Type extends 'buffer' ? Buffer : Transform
+	return result as Type extends 'buffer' ? Buffer : ReadableStream
 
 	async function downloadMsg() {
 		const mContent = extractMessageContent(message.message)
@@ -1076,7 +1104,19 @@ export const downloadMediaMessage = async <Type extends 'buffer' | 'stream'>(
 			return Buffer.concat(bufferArray)
 		}
 
-		return stream
+		const webStream = Readable.toWeb(stream)
+		const fileLength = parseMediaFileLength(media)
+		const FixedLengthStreamCtor = (globalThis as any).FixedLengthStream as
+			| (new (length: number) => { readable: ReadableStream; writable: WritableStream })
+			| undefined
+
+		if (FixedLengthStreamCtor && typeof fileLength === 'number' && fileLength >= 0) {
+			const fixedLengthStream = new FixedLengthStreamCtor(fileLength)
+			void webStream.pipeTo(fixedLengthStream.writable)
+			return fixedLengthStream.readable
+		}
+
+		return webStream
 	}
 }
 

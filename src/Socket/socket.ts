@@ -1,7 +1,5 @@
 import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
-import { URL } from 'url'
-import { promisify } from 'util'
 import { proto } from '../../WAProto/index.js'
 import {
 	DEF_CALLBACK_PREFIX,
@@ -33,10 +31,11 @@ import {
 	makeEventBuffer,
 	makeNoiseHandler,
 	promiseTimeout,
+	scheduleMicrotask,
 	signedKeyPair,
-	xmppSignedPreKey
+	xmppSignedPreKey,
+	getPlatformId
 } from '../Utils'
-import { getPlatformId } from '../Utils/browser-utils'
 import {
 	assertNodeErrorFree,
 	type BinaryNode,
@@ -53,6 +52,7 @@ import {
 import { BinaryInfo } from '../WAM/BinaryInfo.js'
 import { USyncQuery, USyncUser } from '../WAUSync/'
 import { WebSocketClient } from './Client'
+import { Buffer } from 'buffer'
 
 /**
  * Connects to WA servers and performs:
@@ -99,18 +99,19 @@ export const makeSocket = (config: SocketConfig) => {
 		)
 	}
 
-	const url = typeof waWebSocketUrl === 'string' ? new URL(waWebSocketUrl) : waWebSocketUrl
+	const url = new URL(waWebSocketUrl)
 
 	if (config.mobile || url.protocol === 'tcp:') {
 		throw new Boom('Mobile API is not supported anymore', { statusCode: DisconnectReason.loggedOut })
 	}
 
 	if (url.protocol === 'wss' && authState?.creds?.routingInfo) {
-		url.searchParams.append('ED', authState.creds.routingInfo.toString('base64url'))
+		url.searchParams.append('ED', Buffer.from(authState.creds.routingInfo).toString('base64url'))
 	}
 
 	/** ephemeral key pair used to encrypt/decrypt communication. Unique for each connection */
 	const ephemeralKeyPair = Curve.generateKeyPair()
+
 	/** WA noise protocol wrapper */
 	const noise = makeNoiseHandler({
 		keyPair: ephemeralKeyPair,
@@ -123,7 +124,6 @@ export const makeSocket = (config: SocketConfig) => {
 
 	ws.connect()
 
-	const sendPromise = promisify(ws.send)
 	/** send a raw buffer */
 	const sendRawMessage = async (data: Uint8Array | Buffer) => {
 		if (!ws.isOpen) {
@@ -131,13 +131,9 @@ export const makeSocket = (config: SocketConfig) => {
 		}
 
 		const bytes = noise.encodeFrame(data)
-		await promiseTimeout<void>(connectTimeoutMs, async (resolve, reject) => {
-			try {
-				await sendPromise.call(ws, bytes)
-				resolve()
-			} catch (error) {
-				reject(error)
-			}
+		await promiseTimeout<void>(connectTimeoutMs, async (resolve) => {
+			ws.send(bytes)
+			resolve()
 		})
 	}
 
@@ -683,9 +679,9 @@ export const makeSocket = (config: SocketConfig) => {
 
 			const diff = Date.now() - lastDateRecv.getTime()
 			/*
-				check if it's been a suspicious amount of time since the server responded with our last seen
-				it could be that the network is down
-			*/
+			check if it's been a suspicious amount of time since the server responded with our last seen
+			it could be that the network is down
+		*/
 			if (diff > keepAliveIntervalMs + 5000) {
 				void end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost }))
 			} else if (ws.isOpen) {
@@ -943,7 +939,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 		if (node.attrs.lid && authState.creds.me?.id) {
 			const myLID = node.attrs.lid
-			process.nextTick(async () => {
+			scheduleMicrotask(async () => {
 				try {
 					const myPN = authState.creds.me!.id
 
@@ -1006,7 +1002,7 @@ export const makeSocket = (config: SocketConfig) => {
 	})
 
 	let didStartBuffer = false
-	process.nextTick(() => {
+	scheduleMicrotask(() => {
 		if (creds.me?.id) {
 			// start buffering important events
 			// if we're logged in

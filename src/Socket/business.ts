@@ -1,6 +1,6 @@
 import type { GetCatalogOptions, ProductCreate, ProductUpdate, SocketConfig, WAMediaUpload } from '../Types'
 import type { UpdateBussinesProfileProps } from '../Types/Bussines'
-import { getRawMediaUploadData } from '../Utils'
+import { getRawMediaUploadData } from '../Utils/messages-media'
 import {
 	parseCatalogNode,
 	parseCollectionsNode,

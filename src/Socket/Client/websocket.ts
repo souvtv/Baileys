@@ -1,5 +1,4 @@
-import WebSocket from 'ws'
-import { DEFAULT_ORIGIN } from '../../Defaults'
+import type { Buffer } from 'buffer'
 import { AbstractSocketClient } from './types'
 
 export class WebSocketClient extends AbstractSocketClient {
@@ -23,21 +22,37 @@ export class WebSocketClient extends AbstractSocketClient {
 			return
 		}
 
-		this.socket = new WebSocket(this.url, {
-			origin: DEFAULT_ORIGIN,
-			headers: this.config.options?.headers as {},
-			handshakeTimeout: this.config.connectTimeoutMs,
-			timeout: this.config.connectTimeoutMs,
-			agent: this.config.agent
+		this.socket = new WebSocket(this.url)
+
+		// {
+		// 	origin: DEFAULT_ORIGIN,
+		// 	headers: this.config.options?.headers as {},
+		// 	handshakeTimeout: this.config.connectTimeoutMs,
+		// 	timeout: this.config.connectTimeoutMs,
+		// 	agent: this.config.agent
+		// }
+
+		// this.socket.setMaxListeners(0)
+
+
+		this.socket?.addEventListener('close', (closeEv) => {
+			this.emit('close', closeEv)
 		})
 
-		this.socket.setMaxListeners(0)
+		this.socket?.addEventListener('error', (err) => {
+			this.emit('error', err)
+		})
 
-		const events = ['close', 'error', 'upgrade', 'message', 'open', 'ping', 'pong', 'unexpected-response']
+		this.socket?.addEventListener('message', async (ev) => {
+			const data = ev.data
+			const _data = typeof data === 'string' ? data : (data instanceof Blob ? await data.arrayBuffer() : ev.data)
 
-		for (const event of events) {
-			this.socket?.on(event, (...args: any[]) => this.emit(event, ...args))
-		}
+			this.emit('message', _data)
+		})
+
+		this.socket?.addEventListener('open', () => {
+			this.emit('open')
+		})
 	}
 
 	async close() {
@@ -46,7 +61,11 @@ export class WebSocketClient extends AbstractSocketClient {
 		}
 
 		const closePromise = new Promise<void>(resolve => {
-			this.socket?.once('close', resolve)
+			const cb = () => {
+				resolve()
+				this.socket?.removeEventListener('close', () => { })
+			}
+			this.socket?.addEventListener('close', cb)
 		})
 
 		this.socket.close()
@@ -55,8 +74,8 @@ export class WebSocketClient extends AbstractSocketClient {
 
 		this.socket = null
 	}
-	send(str: string | Uint8Array, cb?: (err?: Error) => void): boolean {
-		this.socket?.send(str, cb)
+	send(str: string | BufferSource): boolean {
+		this.socket?.send(str)
 
 		return Boolean(this.socket)
 	}

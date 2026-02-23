@@ -1,4 +1,3 @@
-import NodeCache from '@cacheable/node-cache'
 import { AsyncLocalStorage } from 'async_hooks'
 import { Mutex } from 'async-mutex'
 import { randomBytes } from 'crypto'
@@ -6,7 +5,6 @@ import PQueue from 'p-queue'
 import { DEFAULT_CACHE_TTLS } from '../Defaults'
 import type {
 	AuthenticationCreds,
-	CacheStore,
 	SignalDataSet,
 	SignalDataTypeMap,
 	SignalKeyStore,
@@ -17,6 +15,7 @@ import { Curve, signedKeyPair } from './crypto'
 import { delay, generateRegistrationId } from './generics'
 import type { ILogger } from './logger'
 import { PreKeyManager } from './pre-key-manager'
+import { CacheStore } from './cache'
 
 /**
  * Transaction context stored in AsyncLocalStorage
@@ -40,10 +39,9 @@ export function makeCacheableSignalKeyStore(
 ): SignalKeyStore {
 	const cache =
 		_cache ||
-		new NodeCache<SignalDataTypeMap[keyof SignalDataTypeMap]>({
-			stdTTL: DEFAULT_CACHE_TTLS.SIGNAL_STORE, // 5 minutes
-			useClones: false,
-			deleteOnExpire: true
+		new CacheStore<SignalDataTypeMap[keyof SignalDataTypeMap]>({
+			ttl: DEFAULT_CACHE_TTLS.SIGNAL_STORE, // 5 minutes
+
 		})
 
 	// Mutex for protecting cache operations

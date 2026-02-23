@@ -1,10 +1,8 @@
-import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
 import { DEFAULT_CACHE_TTLS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
 import type {
 	BotListInfo,
-	CacheStore,
 	ChatModification,
 	ChatMutation,
 	LTHashState,
@@ -23,7 +21,7 @@ import type {
 	WAPrivacyMessagesValue,
 	WAPrivacyOnlineValue,
 	WAPrivacyValue,
-	WAReadReceiptsValue
+	WAReadReceiptsValue,
 } from '../Types'
 import { ALL_WA_PATCH_NAMES } from '../Types'
 import type { QuickReplyAction } from '../Types/Bussines.js'
@@ -39,7 +37,8 @@ import {
 	generateProfilePicture,
 	getHistoryMsg,
 	newLTHashState,
-	processSyncAction
+	processSyncAction,
+	CacheStore
 } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
@@ -55,6 +54,8 @@ import {
 } from '../WABinary'
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeSocket } from './socket.js'
+import { Buffer } from 'buffer'
+
 const MAX_SYNC_ATTEMPTS = 2
 
 export const makeChatsSocket = (config: SocketConfig) => {
@@ -72,10 +73,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		ev,
 		ws,
 		authState,
+		signalRepository,
 		generateMessageTag,
 		sendNode,
 		query,
-		signalRepository,
 		onUnexpectedError,
 		sendUnifiedSession
 	} = sock
@@ -101,10 +102,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 	const placeholderResendCache =
 		config.placeholderResendCache ||
-		(new NodeCache<number>({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
-		}) as CacheStore)
+		(new CacheStore<number>({
+			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
+		}))
 
 	if (!config.placeholderResendCache) {
 		config.placeholderResendCache = placeholderResendCache
@@ -1076,7 +1076,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		const historyMsg = getHistoryMsg(msg.message!)
 		const shouldProcessHistoryMsg = historyMsg
 			? shouldSyncHistoryMessage(historyMsg) &&
-				PROCESSABLE_HISTORY_TYPES.includes(historyMsg.syncType! as proto.HistorySync.HistorySyncType)
+			PROCESSABLE_HISTORY_TYPES.includes(historyMsg.syncType! as proto.HistorySync.HistorySyncType)
 			: false
 
 		// State machine: decide on sync and flush
